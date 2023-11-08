@@ -5,6 +5,7 @@ import MachineDto from "src/dto/machine/machine.dto";
 class MapperModule {
   public currentListMapper(plainData) {
     const mapping = {
+      Period: plainData.active,
       WorkTime: plainData.active,
       ActiveTime: plainData.active_time,
       wait: plainData.wait,
@@ -58,42 +59,41 @@ class MapperModule {
     }
 
     const plainMachineData = {
-      Alarm: plainData.Alarm,
-      ActiveTime: activeTime,
-      remainTime: remainTime,
-      wait: matchData.wait,
-      Block: plainData.Block,
-      CycleTime: plainData.CycleTime,
-      Estop: plainData.Estop,
+      Period: matchData.period,
       Execution: execution,
-      ExecutionTime: plainData.ExecutionTime,
-      Id: plainData.Id,
-      Mcode: plainData.Mcode,
-      Message: plainData.Message,
-      MessageTime: plainData.MessageTime,
-      Mid: plainData.Mid,
       Mode: plainData.Mode,
-      ModeTime: plainData.ModeTime,
-      PartCount: plainData.PartCount,
-      PlanCount: plainData.PlanCount,
-      Power: plainData.Power,
-      Program: programName,
-      machine_no: matchData.machineNo,
-      prdct_end: matchData.prdctEnd,
-      start_ymdt: matchData.startYmdt,
       pause:
         ExceptionBlockType.PAUSE.includes(plainData.Mcode) ||
         ExceptionBlockType.PAUSE.includes(plainData.Block),
-      doneTime:
-        (activeTime + matchData.wait) *
-        (plainData.PlanCount - plainData.PartCount),
-      WorkTime: workTime,
-
       isChangePalette: ExceptionBlockType.PALETTE.includes(plainData.Block),
       isReceivePartCount:
         plainData.CountTime < plainData.ActiveTime && now > plainData.ActiveTime
           ? false
           : true,
+      prdct_end: matchData.prdctEnd,
+      start_ymdt: matchData.startYmdt,
+      Mid: plainData.Mid,
+      Id: plainData.Id,
+      Program: programName,
+      Power: plainData.Power,
+      PartCount: plainData.PartCount,
+      PlanCount: plainData.PlanCount,
+      machine_no: matchData.machineNo,
+      Mcode: plainData.Mcode,
+      wait: matchData.wait,
+      Alarm: plainData.Alarm,
+      ActiveTime: activeTime,
+      Block: plainData.Block,
+      remainTime: remainTime,
+      CycleTime: plainData.CycleTime,
+      Estop: plainData.Estop,
+      ExecutionTime: plainData.ExecutionTime,
+      Message: plainData.Message,
+      MessageTime: plainData.MessageTime,
+      ModeTime: plainData.ModeTime,
+
+      WorkTime: workTime,
+
       CountTime: plainData.CountTime,
     };
 
@@ -179,6 +179,7 @@ class MapperModule {
     }
     matchData.activeTime = dataArray[11];
     matchData.planCount = +dataArray[6];
+    matchData.period = +dataArray[9];
     matchData.wait = +dataArray[10];
     matchData.isReceiveMessage = false;
     matchData.pause = false;
