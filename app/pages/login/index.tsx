@@ -53,7 +53,7 @@ export default function Login(props: IProps) {
     <PageContainer>
       <Title>
         <h1>바로팩토리 모니터링</h1>
-        <p>세로형 디스플레이</p>
+        <p>가로형 디스플레이</p>
       </Title>
       <InputWrap>
         <label htmlFor="user_id">ID</label>
