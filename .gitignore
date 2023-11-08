@@ -1,0 +1,21 @@
+# : comments
+
+# no .a files
+
+
+# but do track lib.a, even though you're ignoring .a files above
+!lib.a
+
+# ignore all files in the build/ directory
+node_modules/
+app/node_modules/
+# /app/node_modules
+app/.next/
+# ignore doc/notes.txt, but not doc/server/arch.txt
+/build/
+.env
+.env.development
+.env.production
+
+# ignore all .pdf files in the doc/ directory
+doc/**/*.pdf

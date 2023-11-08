@@ -1,0 +1,20 @@
+{
+  "name": "barofactory",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "homepage": ".",
+  "scripts": {
+    "start": "node app.js",
+    "deploy_prd": "gcloud app deploy --project='prd-barofactory' -q --appyaml=app_prd.yaml",
+    "deploy_dev": "gcloud app deploy --project='centered-sight-237801' -q --appyaml=app_dev.yaml"
+  },
+  "author": "",
+  "engines": {
+    "node": ">=8"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}
