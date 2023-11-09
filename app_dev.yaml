@@ -1,2 +1,2 @@
 runtime: nodejs18 # or another supported version
-service: landscape_monitor_dev
+service: landscape-monitor-dev
