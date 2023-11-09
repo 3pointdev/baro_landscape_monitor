@@ -3,7 +3,11 @@ import machineStatusInstance from "modules/machineStatus.module";
 import timeInstance from "modules/time.module";
 import { StyleColor } from "public/color";
 import { useEffect, useState } from "react";
-import { MachineColorType, MachineTextType } from "src/config/constants";
+import {
+  MachineColorType,
+  MachineExecutionType,
+  MachineTextType,
+} from "src/config/constants";
 import styled, { keyframes } from "styled-components";
 import MachineDto from "../../src/dto/machine/machine.dto";
 
@@ -53,23 +57,25 @@ export default function MonitorItem({ data }: IProps) {
       <td align={"left"} className="mid">
         {data.mid}
       </td>
-      <td
-        align={"left"}
-        className={
-          data.program?.length > 26 ? "is_long_column program" : "program"
-        }
-      >
-        <p>{data.program}</p>
-      </td>
-      <td align={"center"} className="tabular_nums">
-        {data.prdctEnd && dayjs(data.prdctEnd).format("MM/DD HH:mm")}
-      </td>
-      <td align={"center"} className="tabular_nums">
-        {data.planCount > 0 && timeInstance.msToHHMM(+data.period + data.wait)}
-      </td>
-      <td align={"center"} className="counter">
-        {data.planCount > 0 && (
-          <>
+      {data.execution !== MachineExecutionType.OFF ? (
+        // 머신이 켜진경우
+        <>
+          <td
+            align={"left"}
+            className={
+              data.program?.length > 26 ? "is_long_column program" : "program"
+            }
+          >
+            <p>{data.program}</p>
+          </td>
+          <td align={"center"} className="tabular_nums">
+            {/* 완료예상시각이 있는 경우 */}
+            {data.prdctEnd && dayjs(data.prdctEnd).format("MM/DD HH:mm")}
+          </td>
+          <td align={"center"} className="tabular_nums">
+            {timeInstance.msToHHMM(+data.period + data.wait)}
+          </td>
+          <td align={"center"} className="counter">
             <span
               style={{
                 color:
@@ -81,20 +87,34 @@ export default function MonitorItem({ data }: IProps) {
               {data.partCount}
             </span>
             <span>/</span>
-            <span>{data.planCount}</span>
-            <span
-              style={{
-                color:
-                  data.partCount >= data.planCount
-                    ? StyleColor.FINISH
-                    : StyleColor.LIGHT,
-              }}
-            >{`(${Math.floor(
-              (data.partCount / data.planCount) * 100
-            )}%)`}</span>
-          </>
-        )}
-      </td>
+            <span className={data.planCount > 0 ? "" : "warning"}>
+              {/* 목표수량을 입력한경우 ? 목표수량 : 미입력(빨강) */}
+              {data.planCount > 0 ? data.planCount : "미입력"}
+            </span>
+            {data.planCount > 0 && (
+              // 목표수량을 입력한 경우
+              <span
+                style={{
+                  color:
+                    data.partCount >= data.planCount
+                      ? StyleColor.FINISH
+                      : StyleColor.LIGHT,
+                }}
+              >{`(${Math.floor(
+                (data.partCount / data.planCount) * 100
+              )}%)`}</span>
+            )}
+          </td>
+        </>
+      ) : (
+        // 머신이 꺼진경우
+        <>
+          <td />
+          <td />
+          <td />
+          <td />
+        </>
+      )}
       <td align={"center"}>
         <Execution color={color}>{executionText}</Execution>
       </td>
@@ -156,6 +176,11 @@ const TableRow = styled.tr<{ disable: boolean }>`
   }
   .counter {
     max-width: 20vw !important;
+  }
+
+  & .warning {
+    color: ${({ disable }) =>
+      disable ? StyleColor.DISABLE : StyleColor.WARNNING} !important;
   }
 
   & td,

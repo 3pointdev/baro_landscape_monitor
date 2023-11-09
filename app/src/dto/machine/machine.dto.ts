@@ -32,7 +32,7 @@ export default class MachineDto {
   public executionTime: number = 0;
 
   @Expose({ name: "Id" })
-  public id: string = "";
+  public id: number = 0;
 
   @Expose({ name: "Mcode" })
   public mcode: string = "";

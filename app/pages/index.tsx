@@ -46,8 +46,6 @@ function Home({ viewModel }: IProps) {
     };
   }, []);
 
-  console.log(viewModel.machines);
-
   return (
     <MonitoringContainer>
       <HeadLine>
@@ -167,18 +165,18 @@ const tableHeader: TableModel[] = [
   {
     title: "가공명",
     align: "left",
-    size: 32,
+    size: 30,
   },
 
   {
     title: "완료예정일",
     align: "center",
-    size: 13,
+    size: 14,
   },
   {
     title: "실C/T",
     align: "center",
-    size: 5,
+    size: 6,
   },
   {
     title: "완료/목표(%)",

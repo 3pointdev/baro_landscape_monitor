@@ -8,16 +8,10 @@ import {
   SocketResponseType,
 } from "src/config/constants";
 import MachineDto from "src/dto/machine/machine.dto";
-import MonitorListDto from "src/dto/monitor/monitorList.dto";
-import MountedDto from "src/dto/monitor/mounted.dto";
 import DefaultViewModel, { IDefaultProps } from "./default.viewModel";
 
 export default class ViewModel extends DefaultViewModel {
   public machines: MachineDto[] = [];
-
-  public mountedList: MountedDto = new MountedDto();
-  public monitorList: MonitorListDto[] = [];
-
   public unMount: boolean = false;
 
   constructor(props: IDefaultProps) {
@@ -25,8 +19,6 @@ export default class ViewModel extends DefaultViewModel {
 
     makeObservable(this, {
       machines: observable,
-      mountedList: observable,
-      monitorList: observable,
 
       onMessage: action,
       getMachineList: action,
@@ -60,7 +52,6 @@ export default class ViewModel extends DefaultViewModel {
         const data = result.data.map((machine) =>
           mapperInstance.currentListMapper(machine)
         );
-
         runInAction(() => {
           this.machines = data;
           this.initializeSocket(this.onMessage, this.onOpen);
@@ -70,6 +61,24 @@ export default class ViewModel extends DefaultViewModel {
         console.log("error : ", error);
         return false;
       });
+  };
+
+  public updateData = (target: MachineDto) => {
+    //prdct_end의 계산,저장시간을 고려하여 2초딜레이처리
+    setTimeout(async () => {
+      await this.api
+        .get(ServerUrlType.BARO, "/mon/prd_end/" + target.id)
+        .then((result: AxiosResponse<{ prdct_end: string }[]>) => {
+          const newTime = result.data[0].prdct_end;
+          const newTarget = { ...target, prdctEnd: newTime };
+
+          this.handlePartCount(newTarget);
+        })
+        .catch((error: AxiosError) => {
+          console.log("error : ", error);
+          return false;
+        });
+    }, 2000);
   };
 
   // ********************소켓******************** //
@@ -107,6 +116,7 @@ export default class ViewModel extends DefaultViewModel {
             );
             this.handleNoti(mappingNoti);
           }
+
           break;
         case BinaryMessageType.PART_COUNT:
           const matchDataForPartCount = this.machines.find(
@@ -120,6 +130,11 @@ export default class ViewModel extends DefaultViewModel {
             );
             this.handlePartCount(mappingPartCount);
           }
+
+          if (+dataArray[5] > 5 && matchDataForPartCount.prdctEnd) {
+            this.updateData(matchDataForPartCount);
+          }
+
           break;
         case BinaryMessageType.MESSAGE || BinaryMessageType.ALARM:
           const matchDataForMessage = this.machines.find(
@@ -214,8 +229,6 @@ export default class ViewModel extends DefaultViewModel {
       }
     }
 
-    console.log("stat : ", newMachines);
-
     runInAction(() => {
       this.machines = newMachines.sort((a, b) => +a.machineNo - +b.machineNo);
     });
@@ -235,18 +248,5 @@ export default class ViewModel extends DefaultViewModel {
     runInAction(() => {
       this.machines = newMachinesByMessage;
     });
-  };
-
-  checkNoticeUpdate = (objectMessage) => {
-    let result = true;
-
-    if (objectMessage.enterprise !== this.auth.enterprise) {
-      result = false;
-    }
-
-    if (+objectMessage.data.monitor !== this.mountedList.id) {
-      result = false;
-    }
-    return result;
   };
 }
