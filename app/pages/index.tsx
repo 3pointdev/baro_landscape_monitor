@@ -1,5 +1,6 @@
 import MonitorItem from "components/monitor/monitorItem";
 import Timer from "components/timer/timer";
+import dayjs from "dayjs";
 import { inject, observer } from "mobx-react";
 import { NextRouter } from "next/router";
 import { StyleColor } from "public/color";
@@ -20,25 +21,33 @@ function Home({ viewModel }: IProps) {
   const monitorRef = useRef(0);
 
   useEffect(() => {
+    console.log(
+      `%c   refreshTime : ${dayjs(new Date()).format("HH:mm:ss")}   `,
+      "color:#ffffff; background:#ff0000"
+    );
     viewModel.getMachineList();
 
     setTimeout(() => {
       location.reload();
     }, 1200000);
 
-    const changeMonitorInterval = setInterval(() => {
-      const maxMonitor = viewModel.machines.length / 13 - 1;
-      if (maxMonitor > 0) {
-        if (monitorRef.current < maxMonitor) {
-          setViewMonitorNumber((monitorRef.current += 1));
+    let changeMonitorInterval: NodeJS.Timer;
+
+    const maxMonitor = viewModel.machines.length / 13 - 1;
+    if (maxMonitor) {
+      changeMonitorInterval = setInterval(() => {
+        if (maxMonitor > 0) {
+          if (monitorRef.current < maxMonitor) {
+            setViewMonitorNumber((monitorRef.current += 1));
+          } else {
+            monitorRef.current = 0;
+            setViewMonitorNumber(0);
+          }
         } else {
-          monitorRef.current = 0;
-          setViewMonitorNumber(0);
+          clearInterval(changeMonitorInterval);
         }
-      } else {
-        clearInterval(changeMonitorInterval);
-      }
-    }, 10000);
+      }, 10000);
+    }
 
     return () => {
       viewModel.socketDisconnect();
