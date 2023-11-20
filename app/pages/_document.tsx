@@ -40,7 +40,7 @@ class MyDocument extends Document {
           />
         </Head>
         <body>
-          <title>바로팩토리</title>
+          <title>바로팩토리 - 가로형 모니터링</title>
           <Main />
           <NextScript />
         </body>
