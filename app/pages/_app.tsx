@@ -4,7 +4,7 @@ import App from "next/app";
 import { NextRouter, withRouter } from "next/router";
 import "reflect-metadata";
 import initializeStore, { RootStore } from "src/mobx/store";
-import { IDefaultProps } from "src/viewModel/default.viewModel";
+import { IDefaultProps } from "src/viewModel/viewModel";
 import "styles/globals.css";
 
 class MyApp extends App<any, any, any> {
