@@ -1,5 +1,4 @@
 import Document, { Head, Html, Main, NextScript } from "next/document";
-
 import { ServerStyleSheet } from "styled-components";
 
 class MyDocument extends Document {
@@ -33,9 +32,15 @@ class MyDocument extends Document {
   render() {
     return (
       <Html>
-        <Head></Head>
+        <Head>
+          <meta httpEquiv="X-UA-Compatible" content="ie=edge" />
+          <meta
+            name="viewport"
+            content="width=device-width, user-scalable=yes, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0"
+          />
+        </Head>
         <body>
-          <title>바로팩토리 - 3D 모니터링</title>
+          <title>바로팩토리 - 가로형 모니터링</title>
           <Main />
           <NextScript />
         </body>

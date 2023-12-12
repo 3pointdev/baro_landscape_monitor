@@ -1,26 +1,65 @@
-import { inject, observer } from "mobx-react";
+import { AxiosResponse } from "axios";
+import { plainToInstance } from "class-transformer";
+import { ApiModule } from "modules/api.module";
+import authInstance from "modules/auth.module";
 import { NextRouter } from "next/router";
-import ViewModel from "src/viewModel/viewModel";
+import { KeyboardEvent, useEffect, useState } from "react";
+import sha256 from "sha256";
+import { ServerUrlType } from "src/config/constants";
+import AuthDto from "src/dto/auth/auth.dto";
 import styled from "styled-components";
 
 interface IProps {
   router: NextRouter;
-  viewModel: ViewModel;
 }
 
-function Login({ viewModel }: IProps) {
+export default function Login(props: IProps) {
+  const [account, setAccount] = useState({
+    username: "",
+    password: "",
+  });
+  const api = ApiModule.getInstance();
+
+  const handlePressLogin = ({ key }: KeyboardEvent<HTMLInputElement>) => {
+    if (key === "Enter") {
+      loginAction();
+    }
+  };
+
+  const loginAction = async () => {
+    await api
+      .post(ServerUrlType.BARO, "/login/login", {
+        ...account,
+        password: sha256(account.password),
+      })
+      .then((result: AxiosResponse<any>) => {
+        if (result.data.success) {
+          const auth = plainToInstance(AuthDto, {
+            ...result.data,
+            account: account.username,
+            sender: window.localStorage.sender,
+          });
+          authInstance.saveStorage(auth);
+          location.replace("/");
+        } else {
+          throw result.data;
+        }
+      });
+  };
+
+  useEffect(() => {}, []);
+
   return (
     <PageContainer>
       <Title>
         <h1>바로팩토리 모니터링</h1>
-        <p>3D 모니터링</p>
+        <p>가로형 디스플레이</p>
       </Title>
       <InputWrap>
         <label htmlFor="user_id">ID</label>
         <input
           id="user_id"
-          onChange={viewModel.handleChangeUsername}
-          value={viewModel.account.username}
+          onChange={(e) => setAccount({ ...account, username: e.target.value })}
         />
       </InputWrap>
       <InputWrap>
@@ -28,17 +67,14 @@ function Login({ viewModel }: IProps) {
         <input
           id="password"
           type="password"
-          onChange={viewModel.handleChangePassword}
-          onKeyDown={viewModel.handlePressLogin}
-          value={viewModel.account.password}
+          onChange={(e) => setAccount({ ...account, password: e.target.value })}
+          onKeyDown={handlePressLogin}
         />
       </InputWrap>
-      <button onClick={viewModel.loginAction}>로그인</button>
+      <button onClick={loginAction}>로그인</button>
     </PageContainer>
   );
 }
-
-export default inject("viewModel")(observer(Login));
 
 const PageContainer = styled.section`
   width: 100vw;

@@ -1,64 +1,27 @@
 import { AxiosError, AxiosResponse } from "axios";
 import { action, makeObservable, observable, runInAction } from "mobx";
-import { ApiModule, ServerResponse } from "modules/api.module";
-import { ServerUrlType, SocketResponseType } from "src/config/constants";
+import { ServerResponse } from "modules/api.module";
+import mapperInstance from "modules/mapper.module";
+import {
+  BinaryMessageType,
+  ServerUrlType,
+  SocketResponseType,
+} from "src/config/constants";
+import MachineDto from "src/dto/machine/machine.dto";
+import DefaultViewModel, { IDefaultProps } from "./default.viewModel";
 
-import { plainToInstance } from "class-transformer";
-import authInstance from "modules/auth.module";
-import { SocketModule } from "modules/socket.module";
-import { NextRouter } from "next/router";
-import { ChangeEvent, KeyboardEvent } from "react";
-import sha256 from "sha256";
-import AuthDto from "src/dto/auth/auth.dto";
-import DataModel from "src/model/data.model";
-
-interface IAuth {
-  username: string;
-  password: string;
-}
-
-export interface IDefaultProps {
-  headers: any;
-  host: string;
-  router: NextRouter;
-  userAgent: string;
-}
-
-export default class ViewModel {
-  public account: IAuth = { username: "", password: "" };
+export default class ViewModel extends DefaultViewModel {
+  public machines: MachineDto[] = [];
   public unMount: boolean = false;
-  public renderData: DataModel = new DataModel();
-  public beforeData: DataModel = new DataModel();
-  public dataList: DataModel[] = [];
-  protected api: ApiModule;
-  public auth: AuthDto = new AuthDto();
-  public socket: SocketModule;
-  public router: NextRouter;
-  public machineReady: boolean = false;
-  public isSettingStat: boolean = false;
-  public target: number = 0;
 
   constructor(props: IDefaultProps) {
-    this.api = ApiModule.getInstance();
-    this.router = props.router;
+    super(props);
 
     makeObservable(this, {
-      popAuth: action,
-      onOpen: action,
-      processingBinaryData: action,
-      processingObjectData: action,
-      socketDisconnect: action,
-      handleChangePassword: action,
-      handleChangeUsername: action,
-      initializeSocket: action,
+      machines: observable,
 
-      target: observable,
-      account: observable,
-      renderData: observable,
-      dataList: observable,
-      auth: observable,
-      socket: observable,
-      machineReady: observable,
+      onMessage: action,
+      getMachineList: action,
     });
   }
 
@@ -82,21 +45,40 @@ export default class ViewModel {
     });
   };
 
-  public insertMachineList = async (target: string) => {
+  getMachineList = async () => {
     await this.api
       .get(ServerUrlType.BARO, "/machine/currentList")
       .then((result: AxiosResponse<any[]>) => {
-        const data = result.data.find((machine) => machine.mid === target);
-
+        const data = result.data.map((machine) =>
+          mapperInstance.currentListMapper(machine)
+        );
         runInAction(() => {
-          this.target = data.mkey;
+          this.machines = data;
+          this.initializeSocket(this.onMessage, this.onOpen);
         });
-        this.initializeSocket();
       })
       .catch((error: AxiosError) => {
         console.log("error : ", error);
         return false;
       });
+  };
+
+  public updateData = (target: MachineDto) => {
+    //prdct_end의 계산,저장시간을 고려하여 2초딜레이처리
+    setTimeout(async () => {
+      await this.api
+        .get(ServerUrlType.BARO, "/mon/prd_end/" + target.id)
+        .then((result: AxiosResponse<{ prdct_end: string }[]>) => {
+          const newTime = result.data[0].prdct_end;
+          const newTarget = { ...target, prdctEnd: newTime };
+
+          this.handlePartCount(newTarget);
+        })
+        .catch((error: AxiosError) => {
+          console.log("error : ", error);
+          return false;
+        });
+    }, 2000);
   };
 
   // ********************소켓******************** //
@@ -115,198 +97,78 @@ export default class ViewModel {
       this.unMount = false;
     });
   };
-  // websocket_url+this.$store.state.sender+'?ent='+this.$store.state.enterprise+'&view=midext:'+this.mkey
+
   onMessage = async (response: MessageEvent) => {
     if (typeof response.data === "object") {
-      this.processingBinaryData(response);
-    } else {
-      this.processingObjectData(response);
-    }
-  };
+      //바이너리 메시지
+      const updateData = await response.data.text();
+      const dataArray = updateData.split("|");
+      switch (dataArray[1]) {
+        case BinaryMessageType.NOTI:
+          const matchDataForNoti = this.machines.find(
+            (data) => +data?.id === +dataArray[4]
+          );
 
-  processingBinaryData = async (response: MessageEvent) => {
-    if (!this.isSettingStat) return;
-    //바이너리 메시지
-    const updateData = await response.data.text();
-    const dataArray = updateData.split("|");
+          if (matchDataForNoti) {
+            const mappingNoti = mapperInstance.notiMapper(
+              dataArray,
+              matchDataForNoti
+            );
+            this.handleNoti(mappingNoti);
+          }
 
-    let data = await this.setBinarySingleData(dataArray);
+          break;
+        case BinaryMessageType.PART_COUNT:
+          const matchDataForPartCount = this.machines.find(
+            (data) => +data.id === +dataArray[13]
+          );
 
-    runInAction(() => {
-      this.beforeData = this.renderData;
-      this.renderData = data;
+          if (matchDataForPartCount) {
+            const mappingPartCount = mapperInstance.partCountMapper(
+              dataArray,
+              matchDataForPartCount
+            );
+            this.handlePartCount(mappingPartCount);
+          }
 
-      if (data.block !== "") {
-        this.machineReady = true;
+          if (+dataArray[5] > 5 && matchDataForPartCount.prdctEnd) {
+            this.updateData(matchDataForPartCount);
+          }
+
+          break;
+        case BinaryMessageType.MESSAGE || BinaryMessageType.ALARM:
+          const matchDataForMessage = this.machines.find(
+            (data) => +data.id === +dataArray[6]
+          );
+
+          if (matchDataForMessage) {
+            this.handleMessage(matchDataForMessage);
+          }
+          break;
       }
-    });
+    } else {
+      //오브젝트 메시지
 
-    if (data.isCutting) {
-      let dataList = [...this.dataList];
+      const objectMessage = JSON.parse(response.data);
 
-      const isCutInnerCondition = (loopTarget) =>
-        data.isCutInner &&
-        Math.abs(loopTarget.z - data.z) < 0.2 &&
-        loopTarget.x < data.x;
-
-      const isNotCutInnerCondition = (loopTarget) =>
-        !data.isCutInner &&
-        loopTarget.x > data.x &&
-        Math.abs(loopTarget.z - data.z) < 0.2 &&
-        Math.abs(this.beforeData.z - data.z) > 0.1;
-
-      for (let i = 0; i < dataList.length; i++) {
-        const loopTarget = dataList[i];
-        if (isCutInnerCondition(loopTarget)) {
-          dataList.splice(i, 1);
-          i--;
-        } else if (isNotCutInnerCondition(loopTarget)) {
-          dataList[i] = plainToInstance(DataModel, {
-            ...data,
-            z: loopTarget.z,
-            block: loopTarget.block,
+      switch (objectMessage.response) {
+        case SocketResponseType.MACHINE:
+          //object
+          this.handleMachineStat(objectMessage.data);
+          break;
+        case SocketResponseType.BROADCAST:
+          break;
+        case SocketResponseType.CONNECT:
+          runInAction(() => {
+            this.unMount = false;
           });
-        }
+          break;
+        case SocketResponseType.CLOSED:
+          if (!this.unMount) {
+            location.reload();
+          }
+          break;
       }
-      const isOutOfSync =
-        this.beforeData.isCutting === true &&
-        this.renderData.isCutting === false;
-
-      if (isOutOfSync) {
-        console.log("cut finish", data.block);
-      }
-
-      const isDataListLengthValid =
-        dataList.length <= 1 ||
-        (Math.abs(this.beforeData.x - data.x) < 0.7 &&
-          Math.abs(this.beforeData.z - data.z) < 0.7);
-
-      if (isDataListLengthValid) {
-        dataList.push(data);
-      } else {
-        console.log("So fast!!");
-      }
-
-      console.log(data);
-
-      runInAction(() => {
-        this.dataList = dataList;
-      });
-    }
-  };
-
-  setBinarySingleData = async (dataArray: string[]) => {
-    const pathIndex = dataArray.indexOf("path_position");
-    const blockIndex = dataArray.indexOf("block");
-    const xLoadIndex = dataArray.indexOf("Xload");
-    const zLoadIndex = dataArray.indexOf("Zload");
-
-    let data: DataModel = { ...this.renderData };
-
-    const lastData = this.dataList[this.dataList.length - 1];
-
-    if (pathIndex !== -1) {
-      const path = dataArray[pathIndex + 1].split(" ");
-      data = {
-        ...data,
-        x: Math.floor(+path[0] * 10) / 100,
-        z: Math.floor(+path[2] * 10) / 100,
-      };
-
-      if (Math.floor(+path[0] * 10) / 100 < 10) {
-        data.isCutInner = true;
-      } else {
-        data.isCutInner = false;
-      }
-    } else {
-      data = {
-        ...data,
-        x: +lastData?.x,
-        z: +lastData?.z,
-      };
-    }
-
-    if (blockIndex !== -1) {
-      const blockCode = dataArray[blockIndex + 1];
-      data = this.cutExtract(data, blockCode);
-    } else {
-      data = {
-        ...data,
-        block: lastData?.block,
-      };
-    }
-
-    if (xLoadIndex !== -1) {
-      data = { ...data, xLoad: +dataArray[xLoadIndex + 1] };
-    } else {
-      data = {
-        ...data,
-        xLoad: +lastData?.xLoad,
-      };
-    }
-
-    if (zLoadIndex !== -1) {
-      data = { ...data, zLoad: +dataArray[zLoadIndex + 1] };
-    } else {
-      data = {
-        ...data,
-        zLoad: +lastData?.zLoad,
-      };
-    }
-
-    return data;
-  };
-
-  cutExtract = (data: DataModel, block: string): DataModel => {
-    const cuttingRegex = /^G(?:0[1-3]|[1-3])(?![0-9])[\s\S]*$/;
-    const functionRegex = /^N\d{3}.*/;
-    const moveRegex = /^[XZUW]/;
-    const programRegex = /^O\d{4}/;
-    const isCuttingCode = cuttingRegex.test(block) || functionRegex.test(block);
-
-    // if (programRegex.test(block)) location.reload();
-
-    if (isCuttingCode) {
-      data.isCutting = true;
-    } else {
-      const isMoveCode = moveRegex.test(block);
-
-      if (this.dataList[this.dataList.length - 1].isCutting && isMoveCode) {
-        data.isCutting = true;
-      } else {
-        data.isCutting = false;
-      }
-    }
-
-    data = { ...data, block: block };
-    return data;
-  };
-
-  processingObjectData = (response: MessageEvent) => {
-    const objectMessage = JSON.parse(response.data);
-
-    if (objectMessage.response === SocketResponseType.MACHINE) {
-      const machine = objectMessage.data.find(
-        (item: any) => +item.Id === this.target
-      ).Data;
-
-      const path = machine.path_position.split(" ");
-
-      const newRenderData = {
-        x: Math.floor(path[0] * 10) / 100,
-        z: Math.floor(path[2] * 10) / 100,
-        xLoad: +machine.Xload,
-        zLoad: +machine.Zload,
-        block: "render start",
-        isCutting: false,
-        isCutInner: false,
-      };
-
-      runInAction(() => {
-        this.renderData = newRenderData;
-        this.dataList = [newRenderData];
-        this.isSettingStat = true;
-      });
     }
   };
 
@@ -319,76 +181,72 @@ export default class ViewModel {
     });
   };
 
-  public onClose = () => {
-    console.log("WebSocket closed");
-    this.initializeSocket();
-  };
+  handleNoti = (mappingNoti: MachineDto) => {
+    const newMachinesByNoti: MachineDto[] = [];
 
-  initializeSocket = () => {
-    this.popAuth();
-    this.socket = new SocketModule(this.auth.enterprise, this.target);
-    this.socket.connect(this.onMessage, this.onOpen, this.onClose);
-  };
-
-  // ********************로그인******************** //
-  // ********************로그인******************** //
-  // ********************로그인******************** //
-  // ********************로그인******************** //
-  // ********************로그인******************** //
-
-  handlePressLogin = ({ key }: KeyboardEvent<HTMLInputElement>) => {
-    if (key === "Enter") {
-      this.loginAction();
+    for (let i = 0; i < this.machines.length; i++) {
+      if (this.machines[i].id === mappingNoti.id) {
+        newMachinesByNoti[i] = mappingNoti;
+      } else {
+        newMachinesByNoti[i] = this.machines[i];
+      }
     }
-  };
-
-  loginAction = async () => {
-    await this.api
-      .post(ServerUrlType.BARO, "/login/login", {
-        ...this.account,
-        password: sha256(this.account.password),
-      })
-      .then((result: AxiosResponse<any>) => {
-        if (result.data.success) {
-          const auth = plainToInstance(AuthDto, {
-            ...result.data,
-            account: this.account.username,
-            sender: window.localStorage.sender,
-          });
-          authInstance.saveStorage(auth);
-          this.router.replace("/");
-        } else {
-          throw result.data;
-        }
-      });
-  };
-
-  handleChangeUsername = (e: ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
 
     runInAction(() => {
-      this.account = { ...this.account, username: value };
+      this.machines = newMachinesByNoti;
     });
   };
 
-  handleChangePassword = (e: ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
+  handlePartCount = (mappingPartCount: MachineDto) => {
+    const newMachinesByPartCount: MachineDto[] = [];
+
+    for (let i = 0; i < this.machines.length; i++) {
+      if (this.machines[i].id === mappingPartCount.id) {
+        newMachinesByPartCount[i] = mappingPartCount;
+      } else {
+        newMachinesByPartCount[i] = this.machines[i];
+      }
+    }
 
     runInAction(() => {
-      this.account = { ...this.account, password: value };
+      this.machines = newMachinesByPartCount;
     });
   };
 
-  popAuth = () => {
+  handleMachineStat = (statArray) => {
+    const newMachines: MachineDto[] = [];
+
+    for (let i = 0; i < statArray.length; i++) {
+      const matchData = this.machines.find(
+        (data) => +data.id === +statArray[i].Id
+      );
+      if (matchData) {
+        const result = mapperInstance.machineStatMapper(
+          statArray[i],
+          matchData
+        );
+        newMachines.push(result);
+      }
+    }
+
     runInAction(() => {
-      const storage = {
-        account: window.localStorage.account,
-        enterprise: window.localStorage.enterprise,
-        enterprise_id: window.localStorage.enterprise_id,
-        token: window.localStorage.token,
-        name: window.localStorage.name,
-      };
-      this.auth = plainToInstance(AuthDto, storage);
+      this.machines = newMachines.sort((a, b) => +a.machineNo - +b.machineNo);
+    });
+  };
+
+  handleMessage = (matchData: MachineDto) => {
+    const newMachinesByMessage: MachineDto[] = [];
+
+    for (let i = 0; i < this.machines.length; i++) {
+      if (this.machines[i].id === matchData.id) {
+        newMachinesByMessage[i] = { ...matchData, isReceiveMessage: true };
+      } else {
+        newMachinesByMessage[i] = this.machines[i];
+      }
+    }
+
+    runInAction(() => {
+      this.machines = newMachinesByMessage;
     });
   };
 }

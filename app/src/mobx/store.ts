@@ -1,6 +1,8 @@
 import { configure } from "mobx";
-import MockViewModel from "src/viewModel/mockViewModel";
-import ViewModel, { IDefaultProps } from "src/viewModel/viewModel";
+import DefaultViewModel, {
+  IDefaultProps,
+} from "src/viewModel/default.viewModel";
+import ViewModel from "src/viewModel/viewModel";
 
 const isServer = typeof window === "undefined";
 
@@ -9,16 +11,14 @@ configure({ enforceActions: "observed" });
 
 export class RootStore {
   //public 뷰모델네임 : 뷰모델타입;
-
+  public defaultViewModel;
   public viewModel: ViewModel;
-  public mockViewModel: MockViewModel;
 
   constructor(initialData: IDefaultProps) {
-    const initData = Object.assign(initialData, { initialData });
+    const initData = Object.assign(initialData, {});
     //this.뷰모델네임 = new 뷰모델(initData);
-
+    this.defaultViewModel = new DefaultViewModel(initData);
     this.viewModel = new ViewModel(initData);
-    this.mockViewModel = new MockViewModel(initData);
   }
 }
 
